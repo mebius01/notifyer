@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +10,8 @@ import (
 	"os"
 	"strconv"
 	"time"
+
+	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"order-platform/internal/notification"
 	"order-platform/internal/sender"
@@ -212,6 +215,21 @@ func NewServer(logger *slog.Logger, senders map[string]sender.Sender) (*Server, 
 
 func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+
+	const dsn = "host=localhost port=5433 user=postgres password=postgres dbname=order_platform_db sslmode=disable"
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		logger.Error("Failed to connect to database", "error", err)
+		os.Exit(1)
+	}
+	defer db.Close()
+
+	if err := db.Ping(); err != nil {
+		logger.Error("Failed to ping database", "error", err)
+		os.Exit(1)
+	}
+
+	logger.Info("Connected to database successfully")
 
 	server, serverError := NewServer(logger, map[string]sender.Sender{
 		"console":  sender.LoggingSender{Sender: sender.NewConsoleSender(os.Stdout), Logger: logger},
