@@ -165,6 +165,19 @@ func (s *Server) getNotification(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(item)
 }
 
+func (s *Server) exportNotification(w http.ResponseWriter, r *http.Request) {
+	const op = "Server.exportNotification"
+
+	if err := WriteAuditLog("audit.log", s.notifications); err != nil {
+		s.logger.Error("Failed to write audit log", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]int{"exported": len(s.notifications)})
+}
+
 // === Middleware ===
 func (s *Server) logRequest(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -213,6 +226,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", server.healthHandler)
+	mux.HandleFunc("GET /api/notifications/export", server.exportNotification)
 	mux.HandleFunc("POST /api/notifications", server.createNotification)
 	mux.HandleFunc("GET /api/notifications", server.listNotification)
 	mux.HandleFunc("GET /api/notifications/{id}", server.getNotification)

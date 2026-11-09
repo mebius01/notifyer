@@ -17,3 +17,6 @@ curl -i http://localhost:8080/api/notifications
 
 === Get Notification ===
 curl -i http://localhost:8080/api/notifications/1
+
+=== Export Notifications ===
+curl -i http://localhost:8080/api/notifications/export
