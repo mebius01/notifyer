@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"notifyer/internal/notification"
-	"notifyer/internal/notification/memory"
 )
 
 // fakeSender records sent notifications and returns err.
@@ -21,10 +20,56 @@ func (f *fakeSender) Send(_ context.Context, n notification.Notification) error 
 	return f.err
 }
 
-func newService(t *testing.T, snd *fakeSender) *notification.Service {
+// fakeRepo is a minimal Repository: IDs start at 1 and equal index+1.
+// If err is set, every method returns it.
+type fakeRepo struct {
+	items []notification.Notification
+	err   error
+}
+
+var _ notification.Repository = (*fakeRepo)(nil)
+
+func (r *fakeRepo) Save(_ context.Context, n notification.Notification) (notification.Notification, error) {
+	if r.err != nil {
+		return notification.Notification{}, r.err
+	}
+	n.ID = len(r.items) + 1
+	r.items = append(r.items, n)
+	return n, nil
+}
+
+func (r *fakeRepo) List(context.Context) ([]notification.Notification, error) {
+	if r.err != nil {
+		return nil, r.err
+	}
+	return r.items, nil
+}
+
+func (r *fakeRepo) Get(_ context.Context, id int) (notification.Notification, error) {
+	if r.err != nil {
+		return notification.Notification{}, r.err
+	}
+	if id < 1 || id > len(r.items) {
+		return notification.Notification{}, notification.ErrNotFound
+	}
+	return r.items[id-1], nil
+}
+
+func (r *fakeRepo) Update(_ context.Context, n notification.Notification) (notification.Notification, error) {
+	if r.err != nil {
+		return notification.Notification{}, r.err
+	}
+	if n.ID < 1 || n.ID > len(r.items) {
+		return notification.Notification{}, notification.ErrNotFound
+	}
+	r.items[n.ID-1] = n
+	return n, nil
+}
+
+func newService(t *testing.T, repo *fakeRepo, snd *fakeSender) *notification.Service {
 	t.Helper()
 	svc, err := notification.NewService(
-		memory.NewRepository(),
+		repo,
 		map[string]notification.Sender{"console": snd},
 	)
 	if err != nil {
@@ -33,12 +78,15 @@ func newService(t *testing.T, snd *fakeSender) *notification.Service {
 	return svc
 }
 
+var errDB = errors.New("db down")
+
 func TestServiceCreate(t *testing.T) {
 	valid := notification.Notification{Recipient: "a@b.c", Channel: "console"}
 
 	tests := []struct {
 		name      string
 		input     notification.Notification
+		repoErr   error
 		sendErr   error
 		wantErr   error
 		wantSends int
@@ -46,13 +94,14 @@ func TestServiceCreate(t *testing.T) {
 		{name: "valid", input: valid, wantSends: 1},
 		{name: "empty recipient", input: notification.Notification{Channel: "console"}, wantErr: notification.ErrInvalid},
 		{name: "unknown channel", input: notification.Notification{Recipient: "a@b.c", Channel: "fax"}, wantErr: notification.ErrUnknownChannel},
+		{name: "repo fails", input: valid, repoErr: errDB, wantErr: errDB},
 		{name: "send fails", input: valid, sendErr: errors.New("smtp down"), wantErr: notification.ErrSendFailed, wantSends: 1},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			snd := &fakeSender{err: tt.sendErr}
-			svc := newService(t, snd)
+			svc := newService(t, &fakeRepo{err: tt.repoErr}, snd)
 
 			got, err := svc.Create(context.Background(), tt.input)
 
@@ -70,7 +119,7 @@ func TestServiceCreate(t *testing.T) {
 }
 
 func TestServiceGetNotFound(t *testing.T) {
-	svc := newService(t, &fakeSender{})
+	svc := newService(t, &fakeRepo{}, &fakeSender{})
 
 	_, err := svc.Get(context.Background(), 42)
 	if !errors.Is(err, notification.ErrNotFound) {
@@ -79,7 +128,7 @@ func TestServiceGetNotFound(t *testing.T) {
 }
 
 func TestServiceUpdateValidates(t *testing.T) {
-	svc := newService(t, &fakeSender{})
+	svc := newService(t, &fakeRepo{}, &fakeSender{})
 	ctx := context.Background()
 
 	saved, err := svc.Create(ctx, notification.Notification{Recipient: "a@b.c", Channel: "console"})
@@ -94,7 +143,7 @@ func TestServiceUpdateValidates(t *testing.T) {
 }
 
 func TestServiceExport(t *testing.T) {
-	svc := newService(t, &fakeSender{})
+	svc := newService(t, &fakeRepo{}, &fakeSender{})
 	ctx := context.Background()
 
 	for range 2 {

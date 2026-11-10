@@ -11,18 +11,49 @@ import (
 
 	"notifyer/internal/httpapi"
 	"notifyer/internal/notification"
-	"notifyer/internal/notification/memory"
 )
 
 type okSender struct{}
 
 func (okSender) Send(context.Context, notification.Notification) error { return nil }
 
-// newHandler builds the real router backed by an in-memory service.
+// fakeRepo is a minimal Repository: IDs start at 1 and equal index+1.
+type fakeRepo struct {
+	items []notification.Notification
+}
+
+var _ notification.Repository = (*fakeRepo)(nil)
+
+func (r *fakeRepo) Save(_ context.Context, n notification.Notification) (notification.Notification, error) {
+	n.ID = len(r.items) + 1
+	r.items = append(r.items, n)
+	return n, nil
+}
+
+func (r *fakeRepo) List(context.Context) ([]notification.Notification, error) {
+	return r.items, nil
+}
+
+func (r *fakeRepo) Get(_ context.Context, id int) (notification.Notification, error) {
+	if id < 1 || id > len(r.items) {
+		return notification.Notification{}, notification.ErrNotFound
+	}
+	return r.items[id-1], nil
+}
+
+func (r *fakeRepo) Update(_ context.Context, n notification.Notification) (notification.Notification, error) {
+	if n.ID < 1 || n.ID > len(r.items) {
+		return notification.Notification{}, notification.ErrNotFound
+	}
+	r.items[n.ID-1] = n
+	return n, nil
+}
+
+// newHandler builds the real router backed by fakeRepo.
 func newHandler(t *testing.T) http.Handler {
 	t.Helper()
 	svc, err := notification.NewService(
-		memory.NewRepository(),
+		&fakeRepo{},
 		map[string]notification.Sender{"console": okSender{}},
 	)
 	if err != nil {

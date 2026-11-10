@@ -27,7 +27,6 @@ internal/                    весь код застосунку (ззовні 
     repository.go            інтерфейси, які потрібні сервісу: Repository, Sender
     service.go               бізнес-сценарії: Create, Get, List, Update, Export
     postgres/                Repository для PostgreSQL
-    memory/                  Repository у пам'яті (для тестів)
     sender/                  реалізації Sender: console, email, telegram, logging
 migrations/                  SQL-міграції goose, вбудовані в бінарник (embed.go)
 docs/                        документація
@@ -56,14 +55,16 @@ cmd/notifyer ────┘   (main знає всіх і з'єднує їх)
 7. **Помилки**: обгортати через `fmt.Errorf("op: %w", err)`, доменні — sentinel-змінні в `errors.go`, перетворення в HTTP-коди — лише в `httpapi/response.go`.
 8. **Доменні типи без JSON-тегів.** Формат API описують DTO в `httpapi`.
 9. **Тести поруч із кодом**, табличні, з фейками замість mock-бібліотек; HTTP — через `httptest`.
+   Фейки (`fakeRepo`, `fakeSender`) живуть у `_test.go`-файлах, а не окремими пакетами:
+   вони не потрапляють у бінарник і не виглядають як частина застосунку.
 10. **Папку створювати, коли вона потрібна**, а не "на виріст".
 
 ## Як додати нову фічу (на прикладі `user`)
 
 1. `internal/user/user.go` — тип `User` + `Validate()` + тест.
 2. `internal/user/errors.go` — `ErrNotFound`, `ErrInvalid`, `ErrEmailTaken`…
-3. `internal/user/repository.go` + `service.go` — інтерфейс сховища і сценарії; тести на `memory`.
-4. `internal/user/memory/`, `internal/user/postgres/` — реалізації сховища.
+3. `internal/user/repository.go` + `service.go` — інтерфейс сховища і сценарії; тести з фейком `fakeRepo` у `service_test.go`.
+4. `internal/user/postgres/` — реалізація сховища.
 5. `migrations/0000N_create_users.sql` — `make migrate-create name=create_users`.
 6. `internal/httpapi/user.go` — DTO і хендлери. Секретні поля (`PasswordHash`) у response DTO не потрапляють.
 7. `internal/httpapi/server.go` — поле `users *user.Service`, параметр у `NewHandler`, маршрути в `routes()`.
