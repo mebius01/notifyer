@@ -1,31 +1,30 @@
+// Package notification contains the notification domain model and business logic.
 package notification
 
 import "fmt"
 
+// Notification is the domain model. API format is defined by DTOs in httpapi.
 type Notification struct {
-	ID        int    `json:"id"`
-	Recipient string `json:"recipient"`
-	Subject   string `json:"subject"`
-	Message   string `json:"message"`
-	Channel   string `json:"channel"`
-	IsUrgent  bool   `json:"is_urgent"`
+	ID        int
+	Recipient string
+	Subject   string
+	Message   string
+	Channel   string
+	IsUrgent  bool
 }
 
 func (n Notification) String() string {
-	return fmt.Sprintf("Notification[ID=%d, Recipient=%s, Channel=%s,]",
+	return fmt.Sprintf("Notification[ID=%d, Recipient=%s, Channel=%s]",
 		n.ID, n.Recipient, n.Channel)
 }
 
-// === Validate ===
-
+// Validate checks required fields.
 func (n Notification) Validate() error {
-	const op = "Notification.Validate"
 	if n.Recipient == "" {
-		return fmt.Errorf("%s: recipient cannot be empty", op)
+		return fmt.Errorf("%w: recipient cannot be empty", ErrInvalid)
 	}
 	if n.Channel == "" {
-		return fmt.Errorf("%s: channel cannot be empty", op)
+		return fmt.Errorf("%w: channel cannot be empty", ErrInvalid)
 	}
-
 	return nil
 }
