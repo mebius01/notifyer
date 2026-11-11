@@ -69,9 +69,18 @@ func run(logger *slog.Logger) error {
 	}
 
 	// === HTTP ===
+	handler, err := httpapi.NewHandler(httpapi.Deps{
+		Notifications: notifications,
+		Logger:        logger,
+		Version:       AppVersion,
+	})
+	if err != nil {
+		return err
+	}
+
 	httpServer := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           httpapi.NewHandler(notifications, logger, AppVersion),
+		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

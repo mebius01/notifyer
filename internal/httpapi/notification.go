@@ -49,7 +49,7 @@ func toNotificationResponse(n notification.Notification) notificationResponse {
 }
 
 // === Routs ===
-func (s *Server) registerNotificationRoutes(mux *http.ServeMux) {
+func (s *api) registerNotificationRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/notifications/export", s.exportNotifications)
 	mux.HandleFunc("POST /api/notifications", s.createNotification)
 	mux.HandleFunc("GET /api/notifications", s.listNotifications)
@@ -58,17 +58,17 @@ func (s *Server) registerNotificationRoutes(mux *http.ServeMux) {
 }
 
 // === Handlers ===
-func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
+func (s *api) createNotification(w http.ResponseWriter, r *http.Request) {
 	var req notificationRequest
 	if err := decodeJSON(w, r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	saved, err := s.notifications.Create(r.Context(), req.toDomain())
+	saved, err := s.Notifications.Create(r.Context(), req.toDomain())
 	if errors.Is(err, notification.ErrSendFailed) {
 		// Saved but not delivered: return 502 with the id of the stored record.
-		s.logger.ErrorContext(r.Context(), "Notification saved but not sent", "id", saved.ID, "error", err)
+		s.Logger.ErrorContext(r.Context(), "Notification saved but not sent", "id", saved.ID, "error", err)
 		writeJSON(w, http.StatusBadGateway, map[string]any{
 			"error": "notification saved but sending failed",
 			"code":  notification.ErrSendFailed.Code,
@@ -83,8 +83,8 @@ func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, toNotificationResponse(saved))
 }
 
-func (s *Server) listNotifications(w http.ResponseWriter, r *http.Request) {
-	all, err := s.notifications.List(r.Context())
+func (s *api) listNotifications(w http.ResponseWriter, r *http.Request) {
+	all, err := s.Notifications.List(r.Context())
 	if err != nil {
 		s.writeServiceError(w, r, err)
 		return
@@ -96,12 +96,12 @@ func (s *Server) listNotifications(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-func (s *Server) getNotification(w http.ResponseWriter, r *http.Request) {
+func (s *api) getNotification(w http.ResponseWriter, r *http.Request) {
 	id, ok := parseID(w, r)
 	if !ok {
 		return
 	}
-	n, err := s.notifications.Get(r.Context(), id)
+	n, err := s.Notifications.Get(r.Context(), id)
 	if err != nil {
 		s.writeServiceError(w, r, err)
 		return
@@ -109,7 +109,7 @@ func (s *Server) getNotification(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toNotificationResponse(n))
 }
 
-func (s *Server) updateNotification(w http.ResponseWriter, r *http.Request) {
+func (s *api) updateNotification(w http.ResponseWriter, r *http.Request) {
 	id, ok := parseID(w, r)
 	if !ok {
 		return
@@ -122,7 +122,7 @@ func (s *Server) updateNotification(w http.ResponseWriter, r *http.Request) {
 	n := req.toDomain()
 	n.ID = id // id comes from the path, not the body
 
-	updated, err := s.notifications.Update(r.Context(), n)
+	updated, err := s.Notifications.Update(r.Context(), n)
 	if err != nil {
 		s.writeServiceError(w, r, err)
 		return
@@ -130,9 +130,9 @@ func (s *Server) updateNotification(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toNotificationResponse(updated))
 }
 
-func (s *Server) exportNotifications(w http.ResponseWriter, r *http.Request) {
+func (s *api) exportNotifications(w http.ResponseWriter, r *http.Request) {
 	var buf bytes.Buffer
-	count, err := s.notifications.Export(r.Context(), &buf)
+	count, err := s.Notifications.Export(r.Context(), &buf)
 	if err != nil {
 		s.writeServiceError(w, r, err)
 		return

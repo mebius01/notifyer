@@ -16,12 +16,12 @@ func (sr *statusRecorder) WriteHeader(code int) {
 }
 
 // logRequest logs method, path, status and duration of each request.
-func (s *Server) logRequest(next http.Handler) http.Handler {
+func (s *api) logRequest(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rec, r)
-		s.logger.InfoContext(r.Context(), "Request completed",
+		s.Logger.InfoContext(r.Context(), "Request completed",
 			"method", r.Method, "path", r.URL.Path,
 			"status", rec.status, "duration", time.Since(start))
 	})

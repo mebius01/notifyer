@@ -18,7 +18,7 @@ internal/                    весь код застосунку (ззовні 
   config/                    читання env один раз на старті
   platform/postgres/         спільна інфраструктура: пул з'єднань, міграції
   httpapi/                   транспорт (HTTP)
-    server.go                Server, NewHandler, routes() — весь API в одному місці
+    api.go                   Deps (залежності), api (вбудовує Deps), NewHandler, routes()
     middleware.go            логування запитів
     response.go              writeJSON, writeError, decodeJSON, parseID
     errors.go                apperr.Kind → HTTP-статус (writeServiceError)
@@ -73,8 +73,8 @@ cmd/notifyer ────┘   (main знає всіх і з'єднує їх)
 4. `internal/user/postgres/` — реалізація сховища.
 5. `migrations/0000N_create_users.sql` — `make migrate-create name=create_users`.
 6. `internal/httpapi/user.go` — DTO і хендлери. Секретні поля (`PasswordHash`) у response DTO не потрапляють.
-7. `internal/httpapi/server.go` — поле `users *user.Service`, параметр у `NewHandler`, маршрути в `routes()`.
-8. `cmd/notifyer/main.go` — створити репозиторій і сервіс, передати в `NewHandler`.
+7. `internal/httpapi/api.go` — поле `Users` у `Deps` (у хендлерах — `a.Users`), перевірка на `nil` у `NewHandler`, виклик `a.registerUserRoutes(mux)` у `routes()`. Самі маршрути — у `registerUserRoutes` в `user.go`.
+8. `cmd/notifyer/main.go` — створити репозиторій і сервіс, додати в `httpapi.Deps{...}`.
 
 Якщо одній фічі потрібні дані іншої (наприклад, `notification` має знати email користувача),
 не імпортуйте чужий сервіс. Оголосіть у споживачі маленький інтерфейс

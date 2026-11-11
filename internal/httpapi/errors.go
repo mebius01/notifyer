@@ -20,17 +20,17 @@ var httpStatus = map[apperr.Kind]int{
 // writeServiceError maps an error from a domain service to an HTTP response.
 // Known kinds expose only Code and Message; everything else becomes a generic 500.
 // 5xx errors are logged with the full chain.
-func (s *Server) writeServiceError(w http.ResponseWriter, r *http.Request, err error) {
+func (s *api) writeServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	var appErr *apperr.Error
 	if errors.As(err, &appErr) {
 		if status, ok := httpStatus[appErr.Kind]; ok {
 			if status >= http.StatusInternalServerError {
-				s.logger.ErrorContext(r.Context(), "Request failed", "code", appErr.Code, "error", err)
+				s.Logger.ErrorContext(r.Context(), "Request failed", "code", appErr.Code, "error", err)
 			}
 			writeJSON(w, status, errorResponse{Error: appErr.Message, Code: appErr.Code})
 			return
 		}
 	}
-	s.logger.ErrorContext(r.Context(), "Request failed", "error", err)
+	s.Logger.ErrorContext(r.Context(), "Request failed", "error", err)
 	writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "internal server error", Code: "internal"})
 }

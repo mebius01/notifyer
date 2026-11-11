@@ -60,8 +60,21 @@ func newHandler(t *testing.T) http.Handler {
 	if err != nil {
 		t.Fatal(err)
 	}
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return httpapi.NewHandler(svc, logger, "test")
+	return mustHandler(t, svc)
+}
+
+// mustHandler builds the router with a discarding logger.
+func mustHandler(t *testing.T, svc *notification.Service) http.Handler {
+	t.Helper()
+	h, err := httpapi.NewHandler(httpapi.Deps{
+		Notifications: svc,
+		Logger:        slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Version:       "test",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return h
 }
 
 func do(h http.Handler, method, path, body string) *httptest.ResponseRecorder {
@@ -200,7 +213,7 @@ func TestInternalErrorIsHidden(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := httpapi.NewHandler(svc, slog.New(slog.NewTextHandler(io.Discard, nil)), "test")
+	h := mustHandler(t, svc)
 
 	w := do(h, "GET", "/api/notifications", "")
 	if w.Code != http.StatusInternalServerError {
@@ -208,5 +221,28 @@ func TestInternalErrorIsHidden(t *testing.T) {
 	}
 	if want := `{"error":"internal server error","code":"internal"}`; strings.TrimSpace(w.Body.String()) != want {
 		t.Errorf("body = %s, want %s", w.Body.String(), want)
+	}
+}
+
+func TestNewHandlerValidatesDeps(t *testing.T) {
+	svc, err := notification.NewService(&fakeRepo{}, map[string]notification.Sender{"console": okSender{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	tests := []struct {
+		name string
+		deps httpapi.Deps
+	}{
+		{"no notifications", httpapi.Deps{Logger: logger}},
+		{"no logger", httpapi.Deps{Notifications: svc}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := httpapi.NewHandler(tt.deps); err == nil {
+				t.Error("want error, got nil")
+			}
+		})
 	}
 }
