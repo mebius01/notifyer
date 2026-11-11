@@ -1,4 +1,3 @@
-// Package postgres provides shared PostgreSQL infrastructure: connection pool and migrations.
 package postgres
 
 import (
@@ -9,14 +8,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Config holds connection settings.
 type Config struct {
 	URL      string
 	MaxConns int32
 	MinConns int32
 }
 
-// NewPool creates a connection pool and pings the database.
 func NewPool(ctx context.Context, cfg Config) (*pgxpool.Pool, error) {
 	const op = "postgres.NewPool"
 

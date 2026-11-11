@@ -51,7 +51,7 @@ func run(logger *slog.Logger) error {
 	defer pool.Close()
 	logger.Info("Connected to database")
 
-	if err := postgres.Migrate(ctx, pool); err != nil {
+	if err := postgres.Migrate(ctx, pool, logger); err != nil {
 		return err
 	}
 
@@ -60,7 +60,9 @@ func run(logger *slog.Logger) error {
 		"console":  sender.NewLogging(sender.NewConsole(os.Stdout), logger),
 		"email":    sender.NewLogging(sender.NewEmail(os.Stdout), logger),
 		"telegram": sender.NewLogging(sender.NewTelegram(os.Stdout), logger),
+		"sms":      sender.NewLogging(sender.NewSMS(os.Stdout), logger),
 	}
+
 	notifications, err := notification.NewService(notifypg.NewRepository(pool), senders)
 	if err != nil {
 		return err

@@ -1,9 +1,7 @@
-// Package notification contains the notification domain model and business logic.
 package notification
 
 import "fmt"
 
-// Notification is the domain model. API format is defined by DTOs in httpapi.
 type Notification struct {
 	ID        int
 	Recipient string

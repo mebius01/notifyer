@@ -27,7 +27,7 @@ internal/                    весь код застосунку (ззовні 
     repository.go            інтерфейси, які потрібні сервісу: Repository, Sender
     service.go               бізнес-сценарії: Create, Get, List, Update, Export
     postgres/                Repository для PostgreSQL
-    sender/                  реалізації Sender: console, email, telegram, logging
+    sender/                  реалізації Sender: console, email, sms, telegram, logging (файл на канал)
 migrations/                  SQL-міграції goose, вбудовані в бінарник (embed.go)
 docs/                        документація
 ```

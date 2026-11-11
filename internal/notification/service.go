@@ -7,6 +7,17 @@ import (
 	"io"
 )
 
+type Repository interface {
+	Save(ctx context.Context, n Notification) (Notification, error)
+	List(ctx context.Context) ([]Notification, error)
+	Get(ctx context.Context, id int) (Notification, error)
+	Update(ctx context.Context, n Notification) (Notification, error)
+}
+
+type Sender interface {
+	Send(ctx context.Context, n Notification) error
+}
+
 type Service struct {
 	repo    Repository
 	senders map[string]Sender
@@ -35,7 +46,7 @@ func (s *Service) senderFor(n Notification) (Sender, error) {
 	return sender, nil
 }
 
-// Create saves and sends n. On delivery failure it returns the saved record and ErrSendFailed.
+// === Services ===
 func (s *Service) Create(ctx context.Context, n Notification) (Notification, error) {
 	const op = "notification.Service.Create"
 
@@ -84,7 +95,6 @@ func (s *Service) Update(ctx context.Context, n Notification) (Notification, err
 	return updated, nil
 }
 
-// Export writes all notifications to w, one per line, and returns the count.
 func (s *Service) Export(ctx context.Context, w io.Writer) (int, error) {
 	const op = "notification.Service.Export"
 
