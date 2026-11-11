@@ -10,8 +10,6 @@ import (
 )
 
 // === DTOs ===
-// Request/response DTOs decouple the API format from the domain model.
-
 type notificationRequest struct {
 	Recipient string `json:"recipient"`
 	Subject   string `json:"subject"`
@@ -50,8 +48,16 @@ func toNotificationResponse(n notification.Notification) notificationResponse {
 	}
 }
 
-// === Handlers ===
+// === Routs ===
+func (s *Server) registerNotificationRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("GET /api/notifications/export", s.exportNotifications)
+	mux.HandleFunc("POST /api/notifications", s.createNotification)
+	mux.HandleFunc("GET /api/notifications", s.listNotifications)
+	mux.HandleFunc("GET /api/notifications/{id}", s.getNotification)
+	mux.HandleFunc("PATCH /api/notifications/{id}", s.updateNotification)
+}
 
+// === Handlers ===
 func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
 	var req notificationRequest
 	if err := decodeJSON(w, r, &req); err != nil {
@@ -65,6 +71,7 @@ func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
 		s.logger.ErrorContext(r.Context(), "Notification saved but not sent", "id", saved.ID, "error", err)
 		writeJSON(w, http.StatusBadGateway, map[string]any{
 			"error": "notification saved but sending failed",
+			"code":  notification.ErrSendFailed.Code,
 			"id":    saved.ID,
 		})
 		return
@@ -123,8 +130,6 @@ func (s *Server) updateNotification(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toNotificationResponse(updated))
 }
 
-// exportNotifications returns all notifications as a downloadable text file.
-// Output is buffered so a failure yields a proper error, not a truncated 200.
 func (s *Server) exportNotifications(w http.ResponseWriter, r *http.Request) {
 	var buf bytes.Buffer
 	count, err := s.notifications.Export(r.Context(), &buf)

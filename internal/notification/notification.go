@@ -19,10 +19,10 @@ func (n Notification) String() string {
 // Validate checks required fields.
 func (n Notification) Validate() error {
 	if n.Recipient == "" {
-		return fmt.Errorf("%w: recipient cannot be empty", ErrInvalid)
+		return ErrInvalid.WithDetail("recipient cannot be empty")
 	}
 	if n.Channel == "" {
-		return fmt.Errorf("%w: channel cannot be empty", ErrInvalid)
+		return ErrInvalid.WithDetail("channel cannot be empty")
 	}
 	return nil
 }

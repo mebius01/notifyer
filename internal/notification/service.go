@@ -41,7 +41,7 @@ func (s *Service) senderFor(n Notification) (Sender, error) {
 	}
 	sender, ok := s.senders[n.Channel]
 	if !ok {
-		return nil, fmt.Errorf("%w: %q", ErrUnknownChannel, n.Channel)
+		return nil, ErrUnknownChannel.WithDetail("%q", n.Channel)
 	}
 	return sender, nil
 }
@@ -61,7 +61,7 @@ func (s *Service) Create(ctx context.Context, n Notification) (Notification, err
 	}
 
 	if err := sender.Send(ctx, saved); err != nil {
-		return saved, fmt.Errorf("%s: %w: %w", op, ErrSendFailed, err)
+		return saved, fmt.Errorf("%s: %w", op, ErrSendFailed.Wrap(err))
 	}
 	return saved, nil
 }

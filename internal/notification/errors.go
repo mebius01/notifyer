@@ -1,11 +1,11 @@
 package notification
 
-import "errors"
+import "notifyer/internal/apperr"
 
-// Domain errors. Transport layers map them to status codes.
+// Domain errors. Transports map their Kind to status codes.
 var (
-	ErrNotFound       = errors.New("notification not found")
-	ErrInvalid        = errors.New("invalid notification")
-	ErrUnknownChannel = errors.New("unknown channel")
-	ErrSendFailed     = errors.New("failed to send notification")
+	ErrNotFound       = &apperr.Error{Kind: apperr.NotFound, Code: "notification.not_found", Message: "notification not found"}
+	ErrInvalid        = &apperr.Error{Kind: apperr.Invalid, Code: "notification.invalid", Message: "invalid notification"}
+	ErrUnknownChannel = &apperr.Error{Kind: apperr.Invalid, Code: "notification.unknown_channel", Message: "unknown channel"}
+	ErrSendFailed     = &apperr.Error{Kind: apperr.Unavailable, Code: "notification.send_failed", Message: "failed to send notification"}
 )

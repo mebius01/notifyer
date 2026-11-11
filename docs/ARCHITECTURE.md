@@ -14,16 +14,18 @@
 ```
 cmd/notifyer/main.go         точка входу: збирає залежності, запускає сервер, graceful shutdown
 internal/                    весь код застосунку (ззовні модуля імпортувати не можна)
+  apperr/                    загальні помилки: Kind (NotFound, Invalid…), Code, Message; без HTTP/gRPC
   config/                    читання env один раз на старті
   platform/postgres/         спільна інфраструктура: пул з'єднань, міграції
   httpapi/                   транспорт (HTTP)
     server.go                Server, NewHandler, routes() — весь API в одному місці
     middleware.go            логування запитів
-    response.go              writeJSON, decodeJSON, мапа доменних помилок → HTTP-коди
+    response.go              writeJSON, writeError, decodeJSON, parseID
+    errors.go                apperr.Kind → HTTP-статус (writeServiceError)
     notification.go          хендлери + DTO сповіщень
   notification/              фіча "сповіщення"
     notification.go          доменний тип + Validate()
-    errors.go                доменні помилки (ErrNotFound, ErrInvalid…)
+    errors.go                доменні помилки як *apperr.Error (ErrNotFound, ErrInvalid…)
     repository.go            інтерфейси, які потрібні сервісу: Repository, Sender
     service.go               бізнес-сценарії: Create, Get, List, Update, Export
     postgres/                Repository для PostgreSQL
@@ -52,7 +54,11 @@ cmd/notifyer ────┘   (main знає всіх і з'єднує їх)
 4. **Залежності явні** — через конструктор. Без глобальних змінних, `init()` і DI-фреймворків.
 5. **`main` тонкий**, уся логіка запуску — у `run() error`.
 6. **`context.Context` першим параметром** у кожному методі з I/O.
-7. **Помилки**: обгортати через `fmt.Errorf("op: %w", err)`, доменні — sentinel-змінні в `errors.go`, перетворення в HTTP-коди — лише в `httpapi/response.go`.
+7. **Помилки** — три шари:
+   - `apperr` — категорія (`Kind`), стабільний `Code` для клієнта, безпечний `Message`, внутрішня причина `Err`.
+   - Домен оголошує свої помилки як `*apperr.Error` у `errors.go`. Деталі для клієнта — `ErrX.WithDetail(...)`, внутрішня причина — `ErrX.Wrap(err)`, контекст — `fmt.Errorf("op: %w", err)`. `errors.Is` порівнює за `Code`. Домен не імпортує `net/http` чи gRPC.
+   - Транспорт мапить `Kind` на свій код в одному місці (`httpapi/errors.go`). Невідомі помилки → 500 без деталей, повна помилка — в лог. Особливі випадки (як 502 з `id` для `ErrSendFailed`) — у хендлері домену.
+   - Тіло помилки: `{"error": "<message>", "code": "<code>"}`.
 8. **Доменні типи без JSON-тегів.** Формат API описують DTO в `httpapi`.
 9. **Тести поруч із кодом**, табличні, з фейками замість mock-бібліотек; HTTP — через `httptest`.
    Фейки (`fakeRepo`, `fakeSender`) живуть у `_test.go`-файлах, а не окремими пакетами:
@@ -62,14 +68,13 @@ cmd/notifyer ────┘   (main знає всіх і з'єднує їх)
 ## Як додати нову фічу (на прикладі `user`)
 
 1. `internal/user/user.go` — тип `User` + `Validate()` + тест.
-2. `internal/user/errors.go` — `ErrNotFound`, `ErrInvalid`, `ErrEmailTaken`…
+2. `internal/user/errors.go` — `ErrNotFound`, `ErrInvalid`, `ErrEmailTaken`… як `*apperr.Error` з `Kind` і `Code` (`user.not_found`).
 3. `internal/user/repository.go` + `service.go` — інтерфейс сховища і сценарії; тести з фейком `fakeRepo` у `service_test.go`.
 4. `internal/user/postgres/` — реалізація сховища.
 5. `migrations/0000N_create_users.sql` — `make migrate-create name=create_users`.
 6. `internal/httpapi/user.go` — DTO і хендлери. Секретні поля (`PasswordHash`) у response DTO не потрапляють.
 7. `internal/httpapi/server.go` — поле `users *user.Service`, параметр у `NewHandler`, маршрути в `routes()`.
-8. `internal/httpapi/response.go` — випадки для `user.ErrNotFound` тощо у `writeServiceError`.
-9. `cmd/notifyer/main.go` — створити репозиторій і сервіс, передати в `NewHandler`.
+8. `cmd/notifyer/main.go` — створити репозиторій і сервіс, передати в `NewHandler`.
 
 Якщо одній фічі потрібні дані іншої (наприклад, `notification` має знати email користувача),
 не імпортуйте чужий сервіс. Оголосіть у споживачі маленький інтерфейс

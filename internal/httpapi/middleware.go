@@ -5,7 +5,6 @@ import (
 	"time"
 )
 
-// statusRecorder captures the response status code for logging.
 type statusRecorder struct {
 	http.ResponseWriter
 	status int

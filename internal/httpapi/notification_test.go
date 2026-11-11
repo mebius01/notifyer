@@ -2,6 +2,7 @@ package httpapi_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -156,5 +157,56 @@ func TestExportNotifications(t *testing.T) {
 	}
 	if want := "id:1 recipient:a@b.c channel:console\n"; w.Body.String() != want {
 		t.Errorf("body = %q, want %q", w.Body.String(), want)
+	}
+}
+
+func TestErrorBody(t *testing.T) {
+	h := newHandler(t)
+
+	tests := []struct {
+		name, method, path, body string
+		wantStatus               int
+		wantBody                 string
+	}{
+		{"not found", "GET", "/api/notifications/999", "",
+			http.StatusNotFound, `{"error":"notification not found","code":"notification.not_found"}`},
+		{"invalid", "POST", "/api/notifications", `{"recipient":"","channel":"console"}`,
+			http.StatusBadRequest, `{"error":"invalid notification: recipient cannot be empty","code":"notification.invalid"}`},
+		{"unknown channel", "POST", "/api/notifications", `{"recipient":"a@b.c","channel":"fax"}`,
+			http.StatusBadRequest, `{"error":"unknown channel: \"fax\"","code":"notification.unknown_channel"}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := do(h, tt.method, tt.path, tt.body)
+			if w.Code != tt.wantStatus {
+				t.Errorf("status = %d, want %d", w.Code, tt.wantStatus)
+			}
+			if got := strings.TrimSpace(w.Body.String()); got != tt.wantBody {
+				t.Errorf("body = %s, want %s", got, tt.wantBody)
+			}
+		})
+	}
+}
+
+// failingRepo returns an internal error that must not leak to clients.
+type failingRepo struct{ fakeRepo }
+
+func (failingRepo) List(context.Context) ([]notification.Notification, error) {
+	return nil, errors.New("pq: connection refused at 10.0.0.5")
+}
+
+func TestInternalErrorIsHidden(t *testing.T) {
+	svc, err := notification.NewService(&failingRepo{}, map[string]notification.Sender{"console": okSender{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := httpapi.NewHandler(svc, slog.New(slog.NewTextHandler(io.Discard, nil)), "test")
+
+	w := do(h, "GET", "/api/notifications", "")
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", w.Code)
+	}
+	if want := `{"error":"internal server error","code":"internal"}`; strings.TrimSpace(w.Body.String()) != want {
+		t.Errorf("body = %s, want %s", w.Body.String(), want)
 	}
 }

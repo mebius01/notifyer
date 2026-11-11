@@ -27,11 +27,7 @@ func NewHandler(notifications *notification.Service, logger *slog.Logger, versio
 // routes registers all API endpoints.
 func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /health", s.health)
-	mux.HandleFunc("GET /api/notifications/export", s.exportNotifications)
-	mux.HandleFunc("POST /api/notifications", s.createNotification)
-	mux.HandleFunc("GET /api/notifications", s.listNotifications)
-	mux.HandleFunc("GET /api/notifications/{id}", s.getNotification)
-	mux.HandleFunc("PATCH /api/notifications/{id}", s.updateNotification)
+	s.registerNotificationRoutes(mux)
 }
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {

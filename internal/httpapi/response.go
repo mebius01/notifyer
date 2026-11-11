@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-
-	"notifyer/internal/notification"
 )
 
 // maxBodyBytes limits request body size.
@@ -19,8 +17,14 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+// errorResponse is the JSON body of every error response.
+type errorResponse struct {
+	Error string `json:"error"`
+	Code  string `json:"code,omitempty"`
+}
+
 func writeError(w http.ResponseWriter, status int, msg string) {
-	writeJSON(w, status, map[string]string{"error": msg})
+	writeJSON(w, status, errorResponse{Error: msg})
 }
 
 // decodeJSON decodes a single JSON object into dst, rejecting unknown fields.
@@ -46,19 +50,4 @@ func parseID(w http.ResponseWriter, r *http.Request) (int, bool) {
 		return 0, false
 	}
 	return id, true
-}
-
-// writeServiceError maps domain errors to HTTP responses.
-// Unknown errors are logged and hidden behind a generic 500.
-func (s *Server) writeServiceError(w http.ResponseWriter, r *http.Request, err error) {
-	switch {
-	case errors.Is(err, notification.ErrNotFound):
-		writeError(w, http.StatusNotFound, notification.ErrNotFound.Error())
-	case errors.Is(err, notification.ErrInvalid),
-		errors.Is(err, notification.ErrUnknownChannel):
-		writeError(w, http.StatusBadRequest, err.Error())
-	default:
-		s.logger.ErrorContext(r.Context(), "Request failed", "error", err)
-		writeError(w, http.StatusInternalServerError, "internal server error")
-	}
 }
