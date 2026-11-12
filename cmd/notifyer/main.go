@@ -16,6 +16,7 @@ import (
 	"notifyer/internal/notification"
 	notifypg "notifyer/internal/notification/postgres"
 	"notifyer/internal/notification/sender"
+	"notifyer/internal/platform/async"
 	"notifyer/internal/platform/postgres"
 )
 
@@ -62,8 +63,9 @@ func run(logger *slog.Logger) error {
 		"telegram": sender.NewLogging(sender.NewTelegram(os.Stdout), logger),
 		"sms":      sender.NewLogging(sender.NewSMS(os.Stdout), logger),
 	}
-
-	notifications, err := notification.NewService(notifypg.NewRepository(pool), senders)
+	var sp async.Group
+	notifications, err := notification.NewService(notifypg.NewRepository(pool),
+		senders, logger, &sp)
 	if err != nil {
 		return err
 	}

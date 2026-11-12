@@ -50,12 +50,31 @@ func (r *fakeRepo) Update(_ context.Context, n notification.Notification) (notif
 	return n, nil
 }
 
+func (r *fakeRepo) UpdateStatus(_ context.Context, id int, status notification.NotificationStatus) (notification.Notification, error) {
+	if id < 1 || id > len(r.items) {
+		return notification.Notification{}, notification.ErrNotFound
+	}
+	r.items[id-1].Status = status
+	return r.items[id-1], nil
+}
+
+// noopSpawner drops background tasks: handler tests do not need them.
+type noopSpawner struct{}
+
+func (noopSpawner) Go(func()) {}
+
+func discardLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
+
 // newHandler builds the real router backed by fakeRepo.
 func newHandler(t *testing.T) http.Handler {
 	t.Helper()
 	svc, err := notification.NewService(
 		&fakeRepo{},
 		map[string]notification.Sender{"console": okSender{}},
+		discardLogger(),
+		noopSpawner{},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -100,7 +119,7 @@ func TestCreateNotification(t *testing.T) {
 		body       string
 		wantStatus int
 	}{
-		{"valid", `{"recipient":"a@b.c","channel":"console"}`, http.StatusCreated},
+		{"valid", `{"recipient":"a@b.c","channel":"console"}`, http.StatusAccepted},
 		{"broken JSON", `{"recipient":`, http.StatusBadRequest},
 		{"unknown field", `{"id":5,"recipient":"a@b.c","channel":"console"}`, http.StatusBadRequest},
 		{"empty recipient", `{"recipient":"","channel":"console"}`, http.StatusBadRequest},
@@ -209,7 +228,7 @@ func (failingRepo) List(context.Context) ([]notification.Notification, error) {
 }
 
 func TestInternalErrorIsHidden(t *testing.T) {
-	svc, err := notification.NewService(&failingRepo{}, map[string]notification.Sender{"console": okSender{}})
+	svc, err := notification.NewService(&failingRepo{}, map[string]notification.Sender{"console": okSender{}}, discardLogger(), noopSpawner{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -225,7 +244,7 @@ func TestInternalErrorIsHidden(t *testing.T) {
 }
 
 func TestNewHandlerValidatesDeps(t *testing.T) {
-	svc, err := notification.NewService(&fakeRepo{}, map[string]notification.Sender{"console": okSender{}})
+	svc, err := notification.NewService(&fakeRepo{}, map[string]notification.Sender{"console": okSender{}}, discardLogger(), noopSpawner{})
 	if err != nil {
 		t.Fatal(err)
 	}

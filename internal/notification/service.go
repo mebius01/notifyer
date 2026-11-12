@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
+	"time"
 )
 
 type Repository interface {
@@ -12,26 +14,38 @@ type Repository interface {
 	List(ctx context.Context) ([]Notification, error)
 	Get(ctx context.Context, id int) (Notification, error)
 	Update(ctx context.Context, n Notification) (Notification, error)
+	UpdateStatus(ctx context.Context, id int, status NotificationStatus) (Notification, error)
 }
 
 type Sender interface {
 	Send(ctx context.Context, n Notification) error
 }
 
+// Spawner runs fn in the background. The owner decides how to track it.
+type Spawner interface{ Go(fn func()) }
+
 type Service struct {
 	repo    Repository
 	senders map[string]Sender
+	logger  *slog.Logger
+	sp      Spawner
 }
 
 // NewService creates a Service. senders maps channel name to Sender.
-func NewService(repo Repository, senders map[string]Sender) (*Service, error) {
+func NewService(repo Repository, senders map[string]Sender, logger *slog.Logger, sp Spawner) (*Service, error) {
 	if repo == nil {
 		return nil, errors.New("notification.NewService: repository is nil")
 	}
 	if len(senders) == 0 {
 		return nil, errors.New("notification.NewService: no senders")
 	}
-	return &Service{repo: repo, senders: senders}, nil
+	if logger == nil {
+		return nil, errors.New("notification.NewService: logger is nil")
+	}
+	if sp == nil {
+		return nil, errors.New("notification.NewService: spawner is nil")
+	}
+	return &Service{repo: repo, senders: senders, logger: logger, sp: sp}, nil
 }
 
 // senderFor validates n and returns the Sender for its channel.
@@ -60,9 +74,24 @@ func (s *Service) Create(ctx context.Context, n Notification) (Notification, err
 		return Notification{}, fmt.Errorf("%s: %w", op, err)
 	}
 
-	if err := sender.Send(ctx, saved); err != nil {
-		return saved, fmt.Errorf("%s: %w", op, ErrSendFailed.Wrap(err))
-	}
+	s.sp.Go(func() {
+		bgCtx := context.WithoutCancel(ctx)
+		time.Sleep(time.Duration(15) * time.Second)
+		status := NotificationStatusSent
+
+		// Send
+		if err := sender.Send(bgCtx, saved); err != nil {
+			s.logger.ErrorContext(bgCtx, "Send failed", "id", saved.ID, "error", err)
+			status = NotificationStatusFail
+		}
+		// Update status
+		if _, err := s.repo.UpdateStatus(bgCtx, saved.ID, status); err != nil {
+			s.logger.ErrorContext(bgCtx, "Update status failed", "id", saved.ID, "status", status, "error", err)
+			return
+		}
+		s.logger.InfoContext(bgCtx, "Status updated", "id", saved.ID, "status", status)
+	})
+
 	return saved, nil
 }
 
@@ -89,6 +118,19 @@ func (s *Service) Update(ctx context.Context, n Notification) (Notification, err
 		return Notification{}, err
 	}
 	updated, err := s.repo.Update(ctx, n)
+	if err != nil {
+		return Notification{}, fmt.Errorf("%s: %w", op, err)
+	}
+	return updated, nil
+}
+
+func (s *Service) UpdateStatus(ctx context.Context, id int, status NotificationStatus) (Notification, error) {
+	const op = "notification.Service.UpdateStatus"
+
+	if !status.Valid() {
+		return Notification{}, ErrInvalid.WithDetail("unknown status %q", status)
+	}
+	updated, err := s.repo.UpdateStatus(ctx, id, status)
 	if err != nil {
 		return Notification{}, fmt.Errorf("%s: %w", op, err)
 	}

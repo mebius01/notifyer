@@ -35,6 +35,7 @@ type notificationResponse struct {
 	Message   string `json:"message"`
 	Channel   string `json:"channel"`
 	IsUrgent  bool   `json:"is_urgent"`
+	Status    string `json:"status"`
 }
 
 func toNotificationResponse(n notification.Notification) notificationResponse {
@@ -45,6 +46,7 @@ func toNotificationResponse(n notification.Notification) notificationResponse {
 		Message:   n.Message,
 		Channel:   n.Channel,
 		IsUrgent:  n.IsUrgent,
+		Status:    string(n.Status),
 	}
 }
 
@@ -80,7 +82,7 @@ func (s *api) createNotification(w http.ResponseWriter, r *http.Request) {
 		s.writeServiceError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, toNotificationResponse(saved))
+	writeJSON(w, http.StatusAccepted, toNotificationResponse(saved))
 }
 
 func (s *api) listNotifications(w http.ResponseWriter, r *http.Request) {

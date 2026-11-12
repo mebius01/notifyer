@@ -2,6 +2,22 @@ package notification
 
 import "fmt"
 
+type NotificationStatus string
+
+const (
+	NotificationStatusPending NotificationStatus = "Pending"
+	NotificationStatusSent    NotificationStatus = "Sent"
+	NotificationStatusFail    NotificationStatus = "Fail"
+)
+
+func (s NotificationStatus) Valid() bool {
+	switch s {
+	case NotificationStatusPending, NotificationStatusSent, NotificationStatusFail:
+		return true
+	}
+	return false
+}
+
 type Notification struct {
 	ID        int
 	Recipient string
@@ -9,6 +25,7 @@ type Notification struct {
 	Message   string
 	Channel   string
 	IsUrgent  bool
+	Status    NotificationStatus
 }
 
 func (n Notification) String() string {

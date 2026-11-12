@@ -32,6 +32,20 @@
     },
     {
       "name": "Create notification",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('202 Accepted', () => pm.response.to.have.status(202));",
+              "const body = pm.response.json();",
+              "pm.test('status is Pending', () => pm.expect(body.status).to.eql('Pending'));",
+              "pm.collectionVariables.set('notificationId', body.id);"
+            ]
+          }
+        }
+      ],
       "request": {
         "method": "POST",
         "header": [
@@ -48,7 +62,75 @@
           "raw": "{{baseUrl}}/api/notifications",
           "host": ["{{baseUrl}}"],
           "path": ["api", "notifications"]
+        },
+        "description": "Зберігає сповіщення зі статусом Pending і одразу повертає 202. Відправка йде у фоні: статус зміниться на Sent або Fail через кілька секунд. id зберігається у змінну notificationId."
+      },
+      "response": [
+        {
+          "name": "Accepted",
+          "originalRequest": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipient\": \"user@test.com\",\n  \"subject\": \"Test\",\n  \"message\": \"This is a test notification.\",\n  \"channel\": \"console\",\n  \"is_urgent\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/notifications",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "notifications"]
+            }
+          },
+          "status": "Accepted",
+          "code": 202,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"id\": 1,\n  \"recipient\": \"user@test.com\",\n  \"subject\": \"Test\",\n  \"message\": \"This is a test notification.\",\n  \"channel\": \"console\",\n  \"is_urgent\": false,\n  \"status\": \"Pending\"\n}"
         }
+      ]
+    },
+    {
+      "name": "Create SMS notification",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('202 Accepted', () => pm.response.to.have.status(202));",
+              "pm.collectionVariables.set('notificationId', pm.response.json().id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"recipient\": \"+380501234567\",\n  \"message\": \"Hello via SMS\",\n  \"channel\": \"sms\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/notifications",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "notifications"]
+        },
+        "description": "Те саме, але через канал sms. Після відповіді виконай «Get notification by id» кілька разів, щоб побачити зміну статусу Pending → Sent/Fail."
       },
       "response": []
     },
@@ -67,6 +149,18 @@
     },
     {
       "name": "Get notification by id",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "pm.test('status is valid', () => pm.expect(pm.response.json().status).to.be.oneOf(['Pending', 'Sent', 'Fail']));"
+            ]
+          }
+        }
+      ],
       "request": {
         "method": "GET",
         "header": [],
@@ -74,7 +168,45 @@
           "raw": "{{baseUrl}}/api/notifications/{{notificationId}}",
           "host": ["{{baseUrl}}"],
           "path": ["api", "notifications", "{{notificationId}}"]
-        }
+        },
+        "description": "Поле status: Pending (ще відправляється), Sent або Fail."
+      },
+      "response": []
+    },
+    {
+      "name": "Update notification",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"recipient\": \"user@test.com\",\n  \"subject\": \"Updated\",\n  \"message\": \"Updated message.\",\n  \"channel\": \"console\",\n  \"is_urgent\": true\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/notifications/{{notificationId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "notifications", "{{notificationId}}"]
+        },
+        "description": "Замінює recipient, subject, message, channel і is_urgent. id беруться зі шляху, а status через цей запит змінити не можна."
+      },
+      "response": []
+    },
+    {
+      "name": "Export notifications",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/notifications/export",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "notifications", "export"]
+        },
+        "description": "Повертає текстовий файл notifications.txt; кількість записів у заголовку X-Export-Count."
       },
       "response": []
     }

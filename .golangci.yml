@@ -1,0 +1,20 @@
+version: "2"
+
+linters:
+  # standard = errcheck, govet, ineffassign, staticcheck, unused
+  default: standard
+  enable:
+    - revive       # style: naming (API, ID), exported comments
+    - errorlint    # errors.Is/As instead of == and type asserts
+    - bodyclose    # unclosed http response bodies
+    - contextcheck # wrong ctx passed to a function
+    - misspell     # typos in comments and strings
+
+formatters:
+  enable:
+    - gofumpt   # stricter gofmt
+    - goimports # fix and group imports
+  settings:
+    goimports:
+      local-prefixes:
+        - notifyer

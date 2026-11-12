@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
+	"log/slog"
 	"testing"
 
 	"notifyer/internal/notification"
@@ -66,11 +68,35 @@ func (r *fakeRepo) Update(_ context.Context, n notification.Notification) (notif
 	return n, nil
 }
 
+func (r *fakeRepo) UpdateStatus(_ context.Context, id int, status notification.NotificationStatus) (notification.Notification, error) {
+	if r.err != nil {
+		return notification.Notification{}, r.err
+	}
+	if id < 1 || id > len(r.items) {
+		return notification.Notification{}, notification.ErrNotFound
+	}
+	r.items[id-1].Status = status
+	return r.items[id-1], nil
+}
+
+// fakeSpawner collects background tasks instead of running them,
+// so tests do not wait for the real delay inside Create.
+type fakeSpawner struct{ tasks []func() }
+
+func (f *fakeSpawner) Go(fn func()) { f.tasks = append(f.tasks, fn) }
+
 func newService(t *testing.T, repo *fakeRepo, snd *fakeSender) *notification.Service {
+	t.Helper()
+	return newServiceWith(t, repo, snd, &fakeSpawner{})
+}
+
+func newServiceWith(t *testing.T, repo *fakeRepo, snd *fakeSender, sp notification.Spawner) *notification.Service {
 	t.Helper()
 	svc, err := notification.NewService(
 		repo,
 		map[string]notification.Sender{"console": snd},
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		sp,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -84,34 +110,40 @@ func TestServiceCreate(t *testing.T) {
 	valid := notification.Notification{Recipient: "a@b.c", Channel: "console"}
 
 	tests := []struct {
-		name      string
-		input     notification.Notification
-		repoErr   error
-		sendErr   error
-		wantErr   error
-		wantSends int
+		name    string
+		input   notification.Notification
+		repoErr error
+		sendErr error
+		wantErr error
 	}{
-		{name: "valid", input: valid, wantSends: 1},
+		{name: "valid", input: valid},
 		{name: "empty recipient", input: notification.Notification{Channel: "console"}, wantErr: notification.ErrInvalid},
 		{name: "unknown channel", input: notification.Notification{Recipient: "a@b.c", Channel: "fax"}, wantErr: notification.ErrUnknownChannel},
 		{name: "repo fails", input: valid, repoErr: errDB, wantErr: errDB},
-		{name: "send fails", input: valid, sendErr: errors.New("smtp down"), wantErr: notification.ErrSendFailed, wantSends: 1},
+		// Send runs in the background, so its failure does not fail Create.
+		{name: "send fails in background", input: valid, sendErr: errors.New("smtp down")},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			snd := &fakeSender{err: tt.sendErr}
-			svc := newService(t, &fakeRepo{err: tt.repoErr}, snd)
+			sp := &fakeSpawner{}
+			svc := newServiceWith(t, &fakeRepo{err: tt.repoErr}, snd, sp)
 
 			got, err := svc.Create(context.Background(), tt.input)
 
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("err = %v, want %v", err, tt.wantErr)
 			}
-			if len(snd.sent) != tt.wantSends {
-				t.Errorf("sends = %d, want %d", len(snd.sent), tt.wantSends)
+			// A background send is scheduled only when Create succeeds.
+			wantTasks := 0
+			if tt.wantErr == nil {
+				wantTasks = 1
 			}
-			if tt.wantSends > 0 && got.ID == 0 {
+			if len(sp.tasks) != wantTasks {
+				t.Errorf("background tasks = %d, want %d", len(sp.tasks), wantTasks)
+			}
+			if tt.wantErr == nil && got.ID == 0 {
 				t.Error("expected saved notification to have an ID")
 			}
 		})
