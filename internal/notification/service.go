@@ -43,7 +43,7 @@ func NewService(repo Repository, senders map[string]Sender, logger *slog.Logger,
 		return nil, errors.New("notification.NewService: logger is nil")
 	}
 	if sp == nil {
-		return nil, errors.New("notification.NewService: spawner is nil")
+		return nil, errors.New("notification.NewService: sp is nil")
 	}
 	return &Service{repo: repo, senders: senders, logger: logger, sp: sp}, nil
 }
